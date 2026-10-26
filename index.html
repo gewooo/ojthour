@@ -131,7 +131,7 @@
     /* ── Summary Cards ── */
     .summary {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 12px;
       margin-top: 20px;
     }
@@ -139,38 +139,49 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 16px 12px;
+      padding: 16px 10px;
       text-align: center;
     }
     .summary-card .label {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.8px;
       color: var(--text-muted);
       margin-bottom: 6px;
     }
     .summary-card .value {
-      font-size: 1.35rem;
+      font-size: 1.25rem;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
     }
     .summary-card .value.hours { color: var(--primary); }
     .summary-card .value.days  { color: var(--success); }
     .summary-card .value.target { color: var(--warning); }
+    .summary-card .value.eta    { color: #c084fc; font-size: 1.05rem; }
 
-    /* ── Required Hours Setting ── */
+    /* ── Settings Row ── */
     .settings-row {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 12px 18px;
       margin-top: 14px;
       font-size: 0.8rem;
       color: var(--text-muted);
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
     }
-    .settings-row input {
-      width: 60px;
-      padding: 4px 8px;
+    .setting-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .settings-row input[type="number"] {
+      width: 58px;
+      padding: 4px 6px;
       background: var(--surface-alt);
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -180,6 +191,12 @@
       text-align: center;
     }
     .settings-row input:focus { outline: 2px solid var(--primary); }
+    .settings-row input[type="checkbox"] {
+      accent-color: var(--primary);
+      cursor: pointer;
+      width: 15px;
+      height: 15px;
+    }
 
     /* ── Logs Section ── */
     .logs-section {
@@ -444,7 +461,7 @@
     /* Responsive */
     @media (max-width: 420px) {
       .live-clock { font-size: 2.2rem; }
-      .summary { grid-template-columns: 1fr; }
+      .summary { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -494,12 +511,28 @@
       <div class="label">Remaining</div>
       <div class="value target" id="remainingHours">600</div>
     </div>
+    <div class="summary-card">
+      <div class="label">Est. Finish</div>
+      <div class="value eta" id="estimatedFinish">-</div>
+    </div>
   </div>
 
-  <!-- Required Hours -->
+  <!-- Settings -->
   <div class="settings-row">
-    <span>Required OJT Hours:</span>
-    <input type="number" id="requiredHours" value="600" min="1" onchange="saveSettings()">
+    <div class="setting-item">
+      <span>Target:</span>
+      <input type="number" id="requiredHours" value="600" min="1" onchange="saveSettings()"> hrs
+    </div>
+    <div class="setting-item">
+      <span>Est. Shift:</span>
+      <input type="number" id="dailyHours" value="8" min="1" max="24" onchange="saveSettings()"> hrs/day
+    </div>
+    <div class="setting-item">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+        <input type="checkbox" id="autoDeductBreak" onchange="saveSettings()">
+        <span>-1h break if ≥5h</span>
+      </label>
+    </div>
   </div>
 
   <!-- Add Past Log Button & Form -->
@@ -520,6 +553,12 @@
         <label>Time Out</label>
         <input type="time" id="manualTimeOut">
       </div>
+    </div>
+    <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-muted);cursor:pointer;">
+        <input type="checkbox" id="manualDeductBreak" checked style="accent-color:var(--primary);width:15px;height:15px;">
+        <span>Deduct 1 hour for lunch/break</span>
+      </label>
     </div>
     <div class="form-error" id="formError">⚠ Please fill in all fields and make sure Time Out is after Time In.</div>
     <div class="form-success" id="formSuccess">✓ Entry added successfully!</div>
@@ -565,9 +604,11 @@
 
   function defaultState() {
     return {
-      records: [],        // { id, timeIn, timeOut, note }
+      records: [],        // { id, timeIn, timeOut, breakDeductionHours }
       activeTimeIn: null,  // ISO string or null
       requiredHours: 600,
+      dailyHours: 8,
+      autoDeductBreak: true,
     };
   }
 
@@ -609,10 +650,16 @@
 
   function timeOut() {
     if (!state.activeTimeIn) return;
+    const nowIso = new Date().toISOString();
+    const rawMs = new Date(nowIso) - new Date(state.activeTimeIn);
+    const rawHours = rawMs / 3600000;
+    const shouldDeduct = state.autoDeductBreak && rawHours >= 5;
+
     const record = {
       id: Date.now(),
       timeIn: state.activeTimeIn,
-      timeOut: new Date().toISOString(),
+      timeOut: nowIso,
+      breakDeductionHours: shouldDeduct ? 1 : 0,
     };
     state.records.push(record);
     state.activeTimeIn = null;
@@ -639,20 +686,71 @@
 
   function saveSettings() {
     const val = parseInt(document.getElementById('requiredHours').value) || 600;
+    const daily = parseFloat(document.getElementById('dailyHours').value) || 8;
+    const deduct = document.getElementById('autoDeductBreak').checked;
+
     state.requiredHours = Math.max(1, val);
+    state.dailyHours = Math.max(0.5, daily);
+    state.autoDeductBreak = deduct;
+
     document.getElementById('requiredHours').value = state.requiredHours;
+    document.getElementById('dailyHours').value = state.dailyHours;
+    document.getElementById('autoDeductBreak').checked = state.autoDeductBreak;
+
     saveState();
     updateUI();
   }
 
   // ─── Calculations ───
-  function getHours(record) {
+  function getRawHours(record) {
     const ms = new Date(record.timeOut) - new Date(record.timeIn);
-    return ms / 3600000;
+    return Math.max(0, ms / 3600000);
+  }
+
+  function getHours(record) {
+    const raw = getRawHours(record);
+    let deduction = 0;
+    if (typeof record.breakDeductionHours === 'number') {
+      deduction = record.breakDeductionHours;
+    } else if (state.autoDeductBreak && raw >= 5) {
+      // Legacy records deduction fallback
+      deduction = 1;
+    }
+    return Math.max(0, raw - deduction);
   }
 
   function getTotalHours() {
     return state.records.reduce((sum, r) => sum + getHours(r), 0);
+  }
+
+  function getAverageDailyHours() {
+    const days = getUniqueDays();
+    if (days === 0) return state.dailyHours || 8;
+    const total = getTotalHours();
+    const avg = total / days;
+    return avg > 0.5 ? avg : (state.dailyHours || 8);
+  }
+
+  function calculateEstimatedFinishDate() {
+    const total = getTotalHours();
+    const remaining = Math.max(0, state.requiredHours - total);
+    if (remaining <= 0) return 'Completed! 🎉';
+
+    const dailyPace = state.dailyHours || getAverageDailyHours() || 8;
+    const workDaysNeeded = Math.ceil(remaining / dailyPace);
+
+    let date = new Date();
+    let daysAdded = 0;
+    while (daysAdded < workDaysNeeded) {
+      date.setDate(date.getDate() + 1);
+      const day = date.getDay();
+      // Skip weekends (0 = Sunday, 6 = Saturday)
+      if (day !== 0 && day !== 6) {
+        daysAdded++;
+      }
+    }
+
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function getUniqueDays() {
@@ -752,6 +850,9 @@
     const remaining = Math.max(0, state.requiredHours - total);
     document.getElementById('remainingHours').textContent = remaining.toFixed(1);
     document.getElementById('requiredHours').value = state.requiredHours;
+    document.getElementById('dailyHours').value = state.dailyHours || 8;
+    document.getElementById('autoDeductBreak').checked = state.autoDeductBreak !== false;
+    document.getElementById('estimatedFinish').textContent = calculateEstimatedFinishDate();
 
     // Progress
     const pct = Math.min(100, (total / state.requiredHours) * 100);
@@ -796,6 +897,10 @@
 
     filtered.forEach(r => {
       const h = getHours(r);
+      const rawH = getRawHours(r);
+      const hasDeduction = (typeof r.breakDeductionHours === 'number' && r.breakDeductionHours > 0) ||
+                           (r.breakDeductionHours === undefined && state.autoDeductBreak && rawH >= 5);
+      const breakBadge = hasDeduction ? `<span style="font-size:0.7rem;color:var(--warning);display:block;font-weight:normal;">(-1h break)</span>` : '';
       html += `
         <div class="log-entry">
           <div class="log-left">
@@ -803,7 +908,10 @@
             <div class="log-times">${formatTime(r.timeIn)} <span>→</span> ${formatTime(r.timeOut)}</div>
           </div>
           <div class="log-right">
-            <div class="log-hours">${formatHours(h)}</div>
+            <div>
+              <div class="log-hours">${formatHours(h)}</div>
+              ${breakBadge}
+            </div>
             <button class="log-delete" onclick="deleteRecord(${r.id})" title="Delete">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
@@ -951,10 +1059,13 @@
       timeOut.setDate(timeOut.getDate() + 1);
     }
 
+    const deductBreak = document.getElementById('manualDeductBreak').checked;
+
     const record = {
       id: Date.now() + Math.random(),
       timeIn: timeIn.toISOString(),
       timeOut: timeOut.toISOString(),
+      breakDeductionHours: deductBreak ? 1 : 0,
     };
 
     state.records.push(record);
