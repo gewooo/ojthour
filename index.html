@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OJT Hours Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-alt: #334155;
+      --border: #475569;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --radius: 12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Header ── */
+    header {
+      width: 100%;
+      padding: 24px 0 12px;
+      text-align: center;
+      background: linear-gradient(180deg, #1e293b 0%, transparent 100%);
+    }
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    header p { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+
+    /* ── Main Container ── */
+    .container {
+      width: 100%;
+      max-width: 520px;
+      padding: 0 16px 40px;
+    }
+
+    /* ── Clock Card ── */
+    .clock-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      text-align: center;
+      margin-top: 16px;
+    }
+    .live-clock {
+      font-size: 2.8rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .live-date {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+    .status-badge {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .status-badge.out  { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .status-badge.in   { background: rgba(34,197,94,0.15); color: var(--success); }
+
+    .elapsed-timer {
+      margin-top: 12px;
+      font-size: 1.1rem;
+      color: var(--success);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      min-height: 1.4em;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      justify-content: center;
+    }
+    .btn {
+      flex: 1;
+      max-width: 200px;
+      padding: 14px 0;
+      border: none;
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s, opacity 0.2s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+    .btn-in  { background: var(--primary); color: #fff; }
+    .btn-in:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-out { background: var(--danger); color: #fff; }
+    .btn-out:hover:not(:disabled) { background: var(--danger-hover); }
+
+    /* ── Summary Cards ── */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 12px;
+      text-align: center;
+    }
+    .summary-card .label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .summary-card .value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .summary-card .value.hours { color: var(--primary); }
+    .summary-card .value.days  { color: var(--success); }
+    .summary-card .value.target { color: var(--warning); }
+
+    /* ── Required Hours Setting ── */
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .settings-row input {
+      width: 60px;
+      padding: 4px 8px;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+    .settings-row input:focus { outline: 2px solid var(--primary); }
+
+    /* ── Logs Section ── */
+    .logs-section {
+      margin-top: 24px;
+    }
+    .logs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .logs-header h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .logs-header .action-btns {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-sm {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .btn-sm:hover { background: var(--surface-alt); color: var(--text); }
+    .btn-sm.danger:hover { background: rgba(239,68,68,0.2); color: var(--danger); }
+
+    /* ── Filter Tabs ── */
+    .filter-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      overflow-x: auto;
+    }
+    .filter-tab {
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .filter-tab.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    /* ── Log Entry ── */
+    .log-entry {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: background 0.15s;
+    }
+    .log-entry:hover { background: var(--surface-alt); }
+    .log-left { display: flex; flex-direction: column; gap: 4px; }
+    .log-date { font-size: 0.78rem; color: var(--text-muted); }
+    .log-times { font-size: 0.85rem; font-weight: 500; }
+    .log-times span { color: var(--text-dim); }
+    .log-right { text-align: right; display: flex; align-items: center; gap: 10px; }
+    .log-hours {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--primary);
+      font-variant-numeric: tabular-nums;
+    }
+    .log-delete {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px;
+      border-radius: 6px;
+      transition: color 0.2s, background 0.2s;
+      display: flex;
+      align-items: center;
+    }
+    .log-delete:hover { color: var(--danger); background: rgba(239,68,68,0.1); }
+
+    .log-pending { border-left: 3px solid var(--success); }
+    .log-pending .log-hours { color: var(--success); font-size: 0.85rem; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+    .empty-state svg { margin-bottom: 12px; opacity: 0.3; }
+
+    /* ── Manual Entry Form ── */
+    .manual-entry {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-top: 20px;
+      display: none;
+    }
+    .manual-entry.visible { display: block; }
+    .manual-entry h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 480px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-group label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .form-group input {
+      padding: 10px 12px;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+    .form-group input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      justify-content: flex-end;
+    }
+    .form-actions .btn { max-width: 140px; padding: 10px 0; font-size: 0.85rem; }
+    .btn-secondary {
+      background: var(--surface-alt);
+      color: var(--text-muted);
+    }
+    .btn-secondary:hover { background: var(--border); color: var(--text); }
+    .form-error {
+      color: var(--danger);
+      font-size: 0.78rem;
+      margin-top: 8px;
+      display: none;
+    }
+    .form-error.visible { display: block; }
+    .form-success {
+      color: var(--success);
+      font-size: 0.78rem;
+      margin-top: 8px;
+      display: none;
+    }
+    .form-success.visible { display: block; }
+
+    /* Add entry toggle btn */
+    .btn-add-entry {
+      width: 100%;
+      padding: 12px;
+      margin-top: 16px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-add-entry:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: rgba(59,130,246,0.05);
+    }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-overlay.visible { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      max-width: 380px;
+      width: 100%;
+    }
+    .modal h3 { font-size: 1rem; margin-bottom: 8px; }
+    .modal p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px; }
+    .modal-btns { display: flex; gap: 10px; justify-content: flex-end; }
+    .modal-btns .btn { max-width: 120px; padding: 10px 0; font-size: 0.85rem; }
+
+    /* ── Progress Bar ── */
+    .progress-wrap {
+      margin-top: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .progress-bar {
+      height: 10px;
+      background: var(--surface-alt);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), #a78bfa);
+      border-radius: 999px;
+      transition: width 0.5s ease;
+    }
+    .progress-fill.complete {
+      background: linear-gradient(90deg, var(--success), #4ade80);
+    }
+
+    /* Responsive */
+    @media (max-width: 420px) {
+      .live-clock { font-size: 2.2rem; }
+      .summary { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⏱ OJT Hours Tracker</h1>
+  <p>Track your On-the-Job Training hours</p>
+</header>
+
+<div class="container">
+
+  <!-- Clock Card -->
+  <div class="clock-card">
+    <div class="live-clock" id="liveClock">00:00:00</div>
+    <div class="live-date" id="liveDate"></div>
+    <div id="statusBadge" class="status-badge out">Timed Out</div>
+    <div class="elapsed-timer" id="elapsedTimer"></div>
+    <div class="btn-row">
+      <button class="btn btn-in" id="btnTimeIn" onclick="timeIn()">Time In</button>
+      <button class="btn btn-out" id="btnTimeOut" onclick="timeOut()" disabled>Time Out</button>
+    </div>
+  </div>
+
+  <!-- Progress Bar -->
+  <div class="progress-wrap">
+    <div class="progress-label">
+      <span>OJT Progress</span>
+      <span id="progressText">0 / 600 hrs</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <div class="summary-card">
+      <div class="label">Total Hours</div>
+      <div class="value hours" id="totalHours">0.00</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Days Logged</div>
+      <div class="value days" id="totalDays">0</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Remaining</div>
+      <div class="value target" id="remainingHours">600</div>
+    </div>
+  </div>
+
+  <!-- Required Hours -->
+  <div class="settings-row">
+    <span>Required OJT Hours:</span>
+    <input type="number" id="requiredHours" value="600" min="1" onchange="saveSettings()">
+  </div>
+
+  <!-- Add Past Log Button & Form -->
+  <button class="btn-add-entry" id="btnToggleManual" onclick="toggleManualEntry()">＋ Add Past Log Entry</button>
+
+  <div class="manual-entry" id="manualEntryForm">
+    <h3>📝 Add Past Log</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="manualDate">
+      </div>
+      <div class="form-group">
+        <label>Time In</label>
+        <input type="time" id="manualTimeIn">
+      </div>
+      <div class="form-group">
+        <label>Time Out</label>
+        <input type="time" id="manualTimeOut">
+      </div>
+    </div>
+    <div class="form-error" id="formError">⚠ Please fill in all fields and make sure Time Out is after Time In.</div>
+    <div class="form-success" id="formSuccess">✓ Entry added successfully!</div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="toggleManualEntry()">Cancel</button>
+      <button class="btn btn-in" onclick="addManualEntry()">Add Entry</button>
+    </div>
+  </div>
+
+  <!-- Logs -->
+  <div class="logs-section">
+    <div class="logs-header">
+      <h2>📋 Time Logs</h2>
+      <div class="action-btns">
+        <button class="btn-sm" onclick="exportCSV()">Export CSV</button>
+        <button class="btn-sm danger" onclick="confirmClearAll()">Clear All</button>
+      </div>
+    </div>
+    <div class="filter-tabs" id="filterTabs"></div>
+    <div id="logList"></div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <h3 id="modalTitle">Confirm</h3>
+    <p id="modalMsg">Are you sure?</p>
+    <div class="modal-btns">
+      <button class="btn btn-in" style="background:var(--surface-alt)" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-out" id="modalConfirmBtn" onclick="">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ─── State ───
+  const STORAGE_KEY = 'ojt_tracker';
+  let state = loadState();
+
+  function defaultState() {
+    return {
+      records: [],        // { id, timeIn, timeOut, note }
+      activeTimeIn: null,  // ISO string or null
+      requiredHours: 600,
+    };
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return defaultState();
+      const s = JSON.parse(raw);
+      return { ...defaultState(), ...s };
+    } catch { return defaultState(); }
+  }
+
+  function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  // ─── Clock ───
+  function tickClock() {
+    const now = new Date();
+    document.getElementById('liveClock').textContent = now.toLocaleTimeString('en-US', { hour12: true });
+    document.getElementById('liveDate').textContent = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Elapsed timer
+    if (state.activeTimeIn) {
+      const elapsed = now - new Date(state.activeTimeIn);
+      document.getElementById('elapsedTimer').textContent = '⏳ ' + formatDuration(elapsed);
+    }
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  // ─── Actions ───
+  function timeIn() {
+    if (state.activeTimeIn) return;
+    state.activeTimeIn = new Date().toISOString();
+    saveState();
+    updateUI();
+  }
+
+  function timeOut() {
+    if (!state.activeTimeIn) return;
+    const record = {
+      id: Date.now(),
+      timeIn: state.activeTimeIn,
+      timeOut: new Date().toISOString(),
+    };
+    state.records.push(record);
+    state.activeTimeIn = null;
+    saveState();
+    updateUI();
+  }
+
+  function deleteRecord(id) {
+    showModal('Delete Entry', 'Remove this time log entry?', () => {
+      state.records = state.records.filter(r => r.id !== id);
+      saveState();
+      updateUI();
+    });
+  }
+
+  function confirmClearAll() {
+    if (state.records.length === 0) return;
+    showModal('Clear All Logs', 'This will delete all your time log entries. This cannot be undone.', () => {
+      state.records = [];
+      saveState();
+      updateUI();
+    });
+  }
+
+  function saveSettings() {
+    const val = parseInt(document.getElementById('requiredHours').value) || 600;
+    state.requiredHours = Math.max(1, val);
+    document.getElementById('requiredHours').value = state.requiredHours;
+    saveState();
+    updateUI();
+  }
+
+  // ─── Calculations ───
+  function getHours(record) {
+    const ms = new Date(record.timeOut) - new Date(record.timeIn);
+    return ms / 3600000;
+  }
+
+  function getTotalHours() {
+    return state.records.reduce((sum, r) => sum + getHours(r), 0);
+  }
+
+  function getUniqueDays() {
+    const days = new Set(state.records.map(r => new Date(r.timeIn).toDateString()));
+    return days.size;
+  }
+
+  function getWeekKey(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const startOfYear = new Date(year, 0, 1);
+    const weekNum = Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
+    return `${year}-W${String(weekNum).padStart(2, '0')}`;
+  }
+
+  function getMonthKey(date) {
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+  }
+
+  // ─── Formatting ───
+  function formatDuration(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  function formatTime(iso) {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+
+  function formatDate(iso) {
+    return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function formatHours(h) {
+    const hrs = Math.floor(h);
+    const mins = Math.round((h - hrs) * 60);
+    if (hrs === 0) return `${mins}m`;
+    if (mins === 0) return `${hrs}h`;
+    return `${hrs}h ${mins}m`;
+  }
+
+  // ─── Filtering ───
+  let activeFilter = 'all';
+
+  function buildFilterTabs() {
+    const container = document.getElementById('filterTabs');
+    const months = [...new Set(state.records.map(r => getMonthKey(r.timeIn)))].reverse();
+    let html = `<button class="filter-tab ${activeFilter === 'all' ? 'active' : ''}" onclick="setFilter('all')">All</button>`;
+    html += `<button class="filter-tab ${activeFilter === 'week' ? 'active' : ''}" onclick="setFilter('week')">This Week</button>`;
+    months.forEach(m => {
+      html += `<button class="filter-tab ${activeFilter === m ? 'active' : ''}" onclick="setFilter('${m}')">${m}</button>`;
+    });
+    container.innerHTML = html;
+  }
+
+  function setFilter(f) {
+    activeFilter = f;
+    updateUI();
+  }
+
+  function getFilteredRecords() {
+    let recs = [...state.records].reverse();
+    if (activeFilter === 'all') return recs;
+    if (activeFilter === 'week') {
+      const thisWeek = getWeekKey(new Date());
+      return recs.filter(r => getWeekKey(r.timeIn) === thisWeek);
+    }
+    return recs.filter(r => getMonthKey(r.timeIn) === activeFilter);
+  }
+
+  // ─── UI Update ───
+  function updateUI() {
+    const isActive = !!state.activeTimeIn;
+
+    // Buttons
+    document.getElementById('btnTimeIn').disabled = isActive;
+    document.getElementById('btnTimeOut').disabled = !isActive;
+
+    // Status
+    const badge = document.getElementById('statusBadge');
+    badge.className = 'status-badge ' + (isActive ? 'in' : 'out');
+    badge.textContent = isActive ? 'Timed In' : 'Timed Out';
+
+    // Elapsed
+    if (!isActive) {
+      document.getElementById('elapsedTimer').textContent = '';
+    }
+
+    // Summary
+    const total = getTotalHours();
+    document.getElementById('totalHours').textContent = total.toFixed(2);
+    document.getElementById('totalDays').textContent = getUniqueDays();
+    const remaining = Math.max(0, state.requiredHours - total);
+    document.getElementById('remainingHours').textContent = remaining.toFixed(1);
+    document.getElementById('requiredHours').value = state.requiredHours;
+
+    // Progress
+    const pct = Math.min(100, (total / state.requiredHours) * 100);
+    document.getElementById('progressText').textContent = `${total.toFixed(1)} / ${state.requiredHours} hrs (${pct.toFixed(1)}%)`;
+    const fill = document.getElementById('progressFill');
+    fill.style.width = pct + '%';
+    fill.className = 'progress-fill' + (pct >= 100 ? ' complete' : '');
+
+    // Filter tabs
+    buildFilterTabs();
+
+    // Logs
+    const logList = document.getElementById('logList');
+    const filtered = getFilteredRecords();
+
+    if (filtered.length === 0 && !isActive) {
+      logList.innerHTML = `
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <p>No time logs yet.<br>Hit <strong>Time In</strong> to start tracking!</p>
+        </div>`;
+      return;
+    }
+
+    let html = '';
+
+    // Active session
+    if (isActive) {
+      html += `
+        <div class="log-entry log-pending">
+          <div class="log-left">
+            <div class="log-date">${formatDate(state.activeTimeIn)}</div>
+            <div class="log-times">${formatTime(state.activeTimeIn)} <span>→ In Progress</span></div>
+          </div>
+          <div class="log-right">
+            <div class="log-hours">● Active</div>
+          </div>
+        </div>`;
+    }
+
+    filtered.forEach(r => {
+      const h = getHours(r);
+      html += `
+        <div class="log-entry">
+          <div class="log-left">
+            <div class="log-date">${formatDate(r.timeIn)}</div>
+            <div class="log-times">${formatTime(r.timeIn)} <span>→</span> ${formatTime(r.timeOut)}</div>
+          </div>
+          <div class="log-right">
+            <div class="log-hours">${formatHours(h)}</div>
+            <button class="log-delete" onclick="deleteRecord(${r.id})" title="Delete">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>`;
+    });
+
+    logList.innerHTML = html;
+
+    // Keep manual entry toggle state consistent
+    const form = document.getElementById('manualEntryForm');
+    const btn = document.getElementById('btnToggleManual');
+    if (form.classList.contains('visible')) {
+      btn.style.display = 'none';
+    }
+  }
+
+  // ─── Export ───
+  function exportCSV() {
+    if (state.records.length === 0) return;
+    let csv = 'Date,Time In,Time Out,Hours\n';
+    state.records.forEach(r => {
+      const h = getHours(r);
+      csv += `"${formatDate(r.timeIn)}","${formatTime(r.timeIn)}","${formatTime(r.timeOut)}",${h.toFixed(2)}\n`;
+    });
+    csv += `\nTotal Hours,${getTotalHours().toFixed(2)}\n`;
+    csv += `Required Hours,${state.requiredHours}\n`;
+    csv += `Remaining,${Math.max(0, state.requiredHours - getTotalHours()).toFixed(2)}\n`;
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `OJT_Hours_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ─── Modal ───
+  function showModal(title, msg, onConfirm) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalMsg').textContent = msg;
+    document.getElementById('modalConfirmBtn').onclick = () => { onConfirm(); closeModal(); };
+    document.getElementById('confirmModal').classList.add('visible');
+  }
+
+  function closeModal() {
+    document.getElementById('confirmModal').classList.remove('visible');
+  }
+
+  // Close modal on backdrop click
+  document.getElementById('confirmModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  // ─── Manual Entry ───
+  function toggleManualEntry() {
+    const form = document.getElementById('manualEntryForm');
+    const btn = document.getElementById('btnToggleManual');
+    const isVisible = form.classList.contains('visible');
+    form.classList.toggle('visible');
+    btn.style.display = isVisible ? '' : 'none';
+    if (!isVisible) {
+      // Default the date to today
+      document.getElementById('manualDate').value = new Date().toISOString().slice(0, 10);
+      document.getElementById('manualTimeIn').value = '';
+      document.getElementById('manualTimeOut').value = '';
+      document.getElementById('formError').classList.remove('visible');
+      document.getElementById('formSuccess').classList.remove('visible');
+    }
+  }
+
+  function addManualEntry() {
+    const dateVal = document.getElementById('manualDate').value;
+    const timeInVal = document.getElementById('manualTimeIn').value;
+    const timeOutVal = document.getElementById('manualTimeOut').value;
+    const errorEl = document.getElementById('formError');
+    const successEl = document.getElementById('formSuccess');
+
+    errorEl.classList.remove('visible');
+    successEl.classList.remove('visible');
+
+    if (!dateVal || !timeInVal || !timeOutVal) {
+      errorEl.textContent = '⚠ Please fill in all fields.';
+      errorEl.classList.add('visible');
+      return;
+    }
+
+    const timeIn = new Date(`${dateVal}T${timeInVal}:00`);
+    const timeOut = new Date(`${dateVal}T${timeOutVal}:00`);
+
+    // Handle overnight shifts (time out is earlier than time in = next day)
+    if (timeOut <= timeIn) {
+      timeOut.setDate(timeOut.getDate() + 1);
+    }
+
+    const record = {
+      id: Date.now() + Math.random(),
+      timeIn: timeIn.toISOString(),
+      timeOut: timeOut.toISOString(),
+    };
+
+    state.records.push(record);
+    // Sort records by timeIn so they appear in chronological order
+    state.records.sort((a, b) => new Date(a.timeIn) - new Date(b.timeIn));
+    saveState();
+
+    successEl.textContent = `✓ Added: ${formatDate(record.timeIn)} — ${formatHours(getHours(record))}`;
+    successEl.classList.add('visible');
+
+    // Clear time fields for quick consecutive entries, keep the date
+    document.getElementById('manualTimeIn').value = '';
+    document.getElementById('manualTimeOut').value = '';
+
+    updateUI();
+  }
+
+  // ─── Init ───
+  updateUI();
+</script>
+
+</body>
+</html>
+
