@@ -534,9 +534,12 @@
     <div class="logs-header">
       <h2>📋 Time Logs</h2>
       <div class="action-btns">
+        <button class="btn-sm" onclick="exportJSON()">💾 Backup</button>
+        <button class="btn-sm" onclick="document.getElementById('importFile').click()">📂 Restore</button>
         <button class="btn-sm" onclick="exportCSV()">Export CSV</button>
         <button class="btn-sm danger" onclick="confirmClearAll()">Clear All</button>
       </div>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
     </div>
     <div class="filter-tabs" id="filterTabs"></div>
     <div id="logList"></div>
@@ -837,6 +840,57 @@
     a.download = `OJT_Hours_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // ─── JSON Backup & Restore ───
+  function exportJSON() {
+    const data = {
+      exportDate: new Date().toISOString(),
+      requiredHours: state.requiredHours,
+      records: state.records,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `OJT_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.records || !Array.isArray(data.records)) {
+          alert('❌ Invalid backup file. No records found.');
+          return;
+        }
+        showModal(
+          'Restore Backup',
+          `This backup has ${data.records.length} entries (${data.exportDate ? 'from ' + new Date(data.exportDate).toLocaleDateString() : 'unknown date'}). How would you like to restore?`,
+          () => {
+            // Replace all data
+            state.records = data.records;
+            if (data.requiredHours) state.requiredHours = data.requiredHours;
+            state.records.sort((a, b) => new Date(a.timeIn) - new Date(b.timeIn));
+            saveState();
+            updateUI();
+            alert('✅ Backup restored successfully!');
+          }
+        );
+        // Change confirm button text
+        document.getElementById('modalConfirmBtn').textContent = 'Replace All';
+      } catch (err) {
+        alert('❌ Could not read backup file. Make sure it\'s a valid JSON file.');
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input so same file can be selected again
+    event.target.value = '';
   }
 
   // ─── Modal ───
