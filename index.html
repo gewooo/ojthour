@@ -530,7 +530,13 @@
     <div class="setting-item">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
         <input type="checkbox" id="autoDeductBreak" onchange="saveSettings()">
-        <span>-1h break if ≥5h</span>
+        <span>-1h break</span>
+      </label>
+    </div>
+    <div class="setting-item">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+        <input type="checkbox" id="schedulePreset" onchange="saveSettings()">
+        <span>Auto Schedule (Mon-Thu 8:30-5:30, Fri 8:00-5:00)</span>
       </label>
     </div>
   </div>
@@ -543,7 +549,7 @@
     <div class="form-grid">
       <div class="form-group">
         <label>Date</label>
-        <input type="date" id="manualDate">
+        <input type="date" id="manualDate" onchange="applySchedulePresetToManual()">
       </div>
       <div class="form-group">
         <label>Time In</label>
@@ -609,6 +615,7 @@
       requiredHours: 600,
       dailyHours: 8,
       autoDeductBreak: true,
+      schedulePreset: true,
     };
   }
 
@@ -640,25 +647,57 @@
   setInterval(tickClock, 1000);
   tickClock();
 
+  // ─── Shift Schedule Helpers ───
+  function getScheduledTimesForDate(dateObj) {
+    // 5 = Friday
+    const isFriday = dateObj.getDay() === 5;
+    return {
+      inTimeStr: isFriday ? '08:00' : '08:30',
+      outTimeStr: isFriday ? '17:00' : '17:30',
+      isFriday: isFriday,
+    };
+  }
+
   // ─── Actions ───
   function timeIn() {
     if (state.activeTimeIn) return;
-    state.activeTimeIn = new Date().toISOString();
+
+    if (state.schedulePreset) {
+      const now = new Date();
+      const sched = getScheduledTimesForDate(now);
+      const [inH, inM] = sched.inTimeStr.split(':').map(Number);
+      const presetIn = new Date(now.getFullYear(), now.getMonth(), now.getDate(), inH, inM, 0, 0);
+      state.activeTimeIn = presetIn.toISOString();
+    } else {
+      state.activeTimeIn = new Date().toISOString();
+    }
+
     saveState();
     updateUI();
   }
 
   function timeOut() {
     if (!state.activeTimeIn) return;
-    const nowIso = new Date().toISOString();
-    const rawMs = new Date(nowIso) - new Date(state.activeTimeIn);
+
+    let outIso;
+    if (state.schedulePreset) {
+      const inDate = new Date(state.activeTimeIn);
+      const sched = getScheduledTimesForDate(inDate);
+      const [outH, outM] = sched.outTimeStr.split(':').map(Number);
+      const presetOut = new Date(inDate.getFullYear(), inDate.getMonth(), inDate.getDate(), outH, outM, 0, 0);
+      outIso = presetOut.toISOString();
+    } else {
+      outIso = new Date().toISOString();
+    }
+
+    const rawMs = new Date(outIso) - new Date(state.activeTimeIn);
     const rawHours = rawMs / 3600000;
     const shouldDeduct = state.autoDeductBreak && rawHours >= 5;
 
     const record = {
       id: Date.now(),
       timeIn: state.activeTimeIn,
-      timeOut: nowIso,
+      timeOut: outIso,
       breakDeductionHours: shouldDeduct ? 1 : 0,
     };
     state.records.push(record);
@@ -688,14 +727,17 @@
     const val = parseInt(document.getElementById('requiredHours').value) || 600;
     const daily = parseFloat(document.getElementById('dailyHours').value) || 8;
     const deduct = document.getElementById('autoDeductBreak').checked;
+    const sched = document.getElementById('schedulePreset').checked;
 
     state.requiredHours = Math.max(1, val);
     state.dailyHours = Math.max(0.5, daily);
     state.autoDeductBreak = deduct;
+    state.schedulePreset = sched;
 
     document.getElementById('requiredHours').value = state.requiredHours;
     document.getElementById('dailyHours').value = state.dailyHours;
     document.getElementById('autoDeductBreak').checked = state.autoDeductBreak;
+    document.getElementById('schedulePreset').checked = state.schedulePreset;
 
     saveState();
     updateUI();
@@ -852,6 +894,7 @@
     document.getElementById('requiredHours').value = state.requiredHours;
     document.getElementById('dailyHours').value = state.dailyHours || 8;
     document.getElementById('autoDeductBreak').checked = state.autoDeductBreak !== false;
+    document.getElementById('schedulePreset').checked = state.schedulePreset !== false;
     document.getElementById('estimatedFinish').textContent = calculateEstimatedFinishDate();
 
     // Progress
@@ -1019,6 +1062,18 @@
   });
 
   // ─── Manual Entry ───
+  function applySchedulePresetToManual() {
+    if (!state.schedulePreset) return;
+    const dateVal = document.getElementById('manualDate').value;
+    if (!dateVal) return;
+    // parse date components to avoid timezone offset shifts
+    const [y, m, d] = dateVal.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const sched = getScheduledTimesForDate(dateObj);
+    document.getElementById('manualTimeIn').value = sched.inTimeStr;
+    document.getElementById('manualTimeOut').value = sched.outTimeStr;
+  }
+
   function toggleManualEntry() {
     const form = document.getElementById('manualEntryForm');
     const btn = document.getElementById('btnToggleManual');
@@ -1027,9 +1082,9 @@
     btn.style.display = isVisible ? '' : 'none';
     if (!isVisible) {
       // Default the date to today
-      document.getElementById('manualDate').value = new Date().toISOString().slice(0, 10);
-      document.getElementById('manualTimeIn').value = '';
-      document.getElementById('manualTimeOut').value = '';
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('manualDate').value = today;
+      applySchedulePresetToManual();
       document.getElementById('formError').classList.remove('visible');
       document.getElementById('formSuccess').classList.remove('visible');
     }
