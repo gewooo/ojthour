@@ -230,6 +230,12 @@
     }
     .btn-sm:hover { background: var(--surface-alt); color: var(--text); }
     .btn-sm.danger:hover { background: rgba(239,68,68,0.2); color: var(--danger); }
+    .edit-auth-status {
+      color: var(--success);
+      font-size: 0.7rem;
+      align-self: center;
+      white-space: nowrap;
+    }
 
     /* ── Filter Tabs ── */
     .filter-tabs {
@@ -579,6 +585,8 @@
     <div class="logs-header">
       <h2>📋 Time Logs</h2>
       <div class="action-btns">
+        <span class="edit-auth-status" id="editAuthStatus">🔒 Edit lock</span>
+        <button class="btn-sm" id="editAuthButton">Unlock edits</button>
         <button class="btn-sm" onclick="exportJSON()">💾 Backup</button>
         <button class="btn-sm" onclick="document.getElementById('importFile').click()">📂 Restore</button>
         <button class="btn-sm" onclick="exportCSV()">Export CSV</button>
@@ -589,6 +597,9 @@
     <div class="filter-tabs" id="filterTabs"></div>
     <div id="logList"></div>
   </div>
+  <p style="color:var(--text-dim);font-size:0.68rem;text-align:center;margin-top:10px;">
+    Sign in to load and edit your shared logs from any device.
+  </p>
 </div>
 
 <!-- Confirm Modal -->
@@ -603,10 +614,39 @@
   </div>
 </div>
 
+<!-- Edit Authentication Modal -->
+<div class="modal-overlay" id="editAuthModal">
+  <div class="modal">
+    <h3>Sign In to Edit</h3>
+    <p>Use your Supabase email and password to access your shared logs.</p>
+    <div class="form-group" style="margin-top:14px;">
+      <label for="editUsername">Email</label>
+      <input type="email" id="editUsername" autocomplete="email">
+    </div>
+    <div class="form-group" style="margin-top:12px;">
+      <label for="editPassword">Password</label>
+      <input type="password" id="editPassword" autocomplete="current-password">
+    </div>
+    <div class="form-error" id="editAuthError">⚠ Invalid email or password.</div>
+    <div class="modal-btns">
+      <button class="btn btn-in" style="background:var(--surface-alt)" onclick="closeEditAuth()">Cancel</button>
+      <button class="btn btn-in" style="background:var(--surface-alt)" onclick="createAccount()">Create account</button>
+      <button class="btn btn-in" onclick="authenticateEdit()">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   // ─── State ───
-  const STORAGE_KEY = 'ojt_tracker';
-  let state = loadState();
+  const SUPABASE_URL = 'https://ndlstqrrxklrsewmoidv.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_s7M0uCk8-dCyhpVv5Z4N2Q_KcY694dW';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const STORAGE_KEY = 'ojt_tracker_local_backup';
+  let state = loadLocalState();
+  let currentUser = null;
+  let editAuthenticated = false;
+  let pendingEditAction = null;
 
   function defaultState() {
     return {
@@ -619,17 +659,33 @@
     };
   }
 
-  function loadState() {
+  function loadLocalState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaultState();
       const s = JSON.parse(raw);
       return { ...defaultState(), ...s };
-    } catch { return defaultState(); }
+    } catch (error) {
+      console.error('Could not load local backup:', error);
+      return defaultState();
+    }
   }
 
-  function saveState() {
+  async function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!currentUser) return;
+
+    const { error } = await supabaseClient
+      .from('tracker_state')
+      .upsert({
+        user_id: currentUser.id,
+        data: state,
+        updated_at: new Date().toISOString(),
+      });
+    if (error) {
+      console.error('Could not save shared tracker state:', error);
+      alert(`Could not save shared logs: ${error.message}`);
+    }
   }
 
   // ─── Clock ───
@@ -660,6 +716,10 @@
 
   // ─── Actions ───
   function timeIn() {
+    requireEditAuth(timeInUnlocked);
+  }
+
+  function timeInUnlocked() {
     if (state.activeTimeIn) return;
 
     if (state.schedulePreset) {
@@ -677,6 +737,10 @@
   }
 
   function timeOut() {
+    requireEditAuth(timeOutUnlocked);
+  }
+
+  function timeOutUnlocked() {
     if (!state.activeTimeIn) return;
 
     let outIso;
@@ -707,23 +771,32 @@
   }
 
   function deleteRecord(id) {
-    showModal('Delete Entry', 'Remove this time log entry?', () => {
-      state.records = state.records.filter(r => r.id !== id);
-      saveState();
-      updateUI();
+    requireEditAuth(() => {
+      showModal('Delete Entry', 'Remove this time log entry?', () => {
+        state.records = state.records.filter(r => r.id !== id);
+        saveState();
+        updateUI();
+      });
     });
   }
 
   function confirmClearAll() {
     if (state.records.length === 0) return;
-    showModal('Clear All Logs', 'This will delete all your time log entries. This cannot be undone.', () => {
-      state.records = [];
-      saveState();
-      updateUI();
+    requireEditAuth(() => {
+      showModal('Clear All Logs', 'This will delete all your time log entries. This cannot be undone.', () => {
+        state.records = [];
+        saveState();
+        updateUI();
+      });
     });
   }
 
   function saveSettings() {
+    if (!editAuthenticated) updateUI();
+    requireEditAuth(saveSettingsUnlocked);
+  }
+
+  function saveSettingsUnlocked() {
     const val = parseInt(document.getElementById('requiredHours').value) || 600;
     const daily = parseFloat(document.getElementById('dailyHours').value) || 8;
     const deduct = document.getElementById('autoDeductBreak').checked;
@@ -1020,21 +1093,22 @@
           alert('❌ Invalid backup file. No records found.');
           return;
         }
-        showModal(
-          'Restore Backup',
-          `This backup has ${data.records.length} entries (${data.exportDate ? 'from ' + new Date(data.exportDate).toLocaleDateString() : 'unknown date'}). How would you like to restore?`,
-          () => {
-            // Replace all data
-            state.records = data.records;
-            if (data.requiredHours) state.requiredHours = data.requiredHours;
-            state.records.sort((a, b) => new Date(a.timeIn) - new Date(b.timeIn));
-            saveState();
-            updateUI();
-            alert('✅ Backup restored successfully!');
-          }
-        );
-        // Change confirm button text
-        document.getElementById('modalConfirmBtn').textContent = 'Replace All';
+        requireEditAuth(() => {
+          showModal(
+            'Restore Backup',
+            `This backup has ${data.records.length} entries (${data.exportDate ? 'from ' + new Date(data.exportDate).toLocaleDateString() : 'unknown date'}). How would you like to restore?`,
+            () => {
+              // Replace all data
+              state.records = data.records;
+              if (data.requiredHours) state.requiredHours = data.requiredHours;
+              state.records.sort((a, b) => new Date(a.timeIn) - new Date(b.timeIn));
+              saveState();
+              updateUI();
+              alert('✅ Backup restored successfully!');
+            }
+          );
+          document.getElementById('modalConfirmBtn').textContent = 'Replace All';
+        });
       } catch (err) {
         alert('❌ Could not read backup file. Make sure it\'s a valid JSON file.');
       }
@@ -1056,9 +1130,124 @@
     document.getElementById('confirmModal').classList.remove('visible');
   }
 
+  async function loadSharedState(user) {
+    const { data, error } = await supabaseClient
+      .from('tracker_state')
+      .select('data')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Could not load shared tracker state:', error);
+      alert(`Could not load shared logs: ${error.message}`);
+      return;
+    }
+
+    if (data && data.data) {
+      state = { ...defaultState(), ...data.data };
+    } else {
+      await saveState();
+    }
+    updateUI();
+  }
+
+  async function initializeSupabase() {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) {
+      console.error('Could not restore Supabase session:', error);
+      updateUI();
+      return;
+    }
+
+    if (data.session) {
+      currentUser = data.session.user;
+      await loadSharedState(currentUser);
+      return;
+    }
+    updateUI();
+  }
+
   // Close modal on backdrop click
   document.getElementById('confirmModal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal();
+  });
+
+  function openEditAuth() {
+    document.getElementById('editAuthError').classList.remove('visible');
+    document.getElementById('editUsername').value = '';
+    document.getElementById('editPassword').value = '';
+    document.getElementById('editAuthModal').classList.add('visible');
+    document.getElementById('editUsername').focus();
+  }
+
+  function closeEditAuth() {
+    pendingEditAction = null;
+    document.getElementById('editAuthModal').classList.remove('visible');
+  }
+
+  async function authenticateEdit() {
+    const email = document.getElementById('editUsername').value.trim();
+    const password = document.getElementById('editPassword').value;
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      console.error('Supabase sign-in failed:', error);
+      document.getElementById('editAuthError').classList.add('visible');
+      return;
+    }
+
+    currentUser = data.user;
+    editAuthenticated = true;
+    document.getElementById('editAuthStatus').textContent = '🔓 Edits unlocked';
+    document.getElementById('editAuthButton').textContent = 'Lock edits';
+    const action = pendingEditAction;
+    pendingEditAction = null;
+    document.getElementById('editAuthModal').classList.remove('visible');
+    await loadSharedState(currentUser);
+    if (action) action();
+  }
+
+  async function createAccount() {
+    const email = document.getElementById('editUsername').value.trim();
+    const password = document.getElementById('editPassword').value;
+    const { error } = await supabaseClient.auth.signUp({ email, password });
+    if (error) {
+      console.error('Supabase account creation failed:', error);
+      document.getElementById('editAuthError').textContent = `⚠ ${error.message}`;
+      document.getElementById('editAuthError').classList.add('visible');
+      return;
+    }
+
+    document.getElementById('editAuthError').textContent =
+      '✓ Account created. Check your email if confirmation is required, then sign in.';
+    document.getElementById('editAuthError').classList.add('visible');
+  }
+
+  async function lockEdits() {
+    editAuthenticated = false;
+    document.getElementById('editAuthStatus').textContent = '🔒 Edit lock';
+    document.getElementById('editAuthButton').textContent = 'Unlock edits';
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) console.error('Could not sign out of Supabase:', error);
+  }
+
+  function requireEditAuth(action) {
+    if (editAuthenticated) {
+      action();
+      return;
+    }
+    pendingEditAction = action;
+    openEditAuth();
+  }
+
+  document.getElementById('editAuthButton').addEventListener('click', () => {
+    if (editAuthenticated) lockEdits();
+    else openEditAuth();
+  });
+  document.getElementById('editAuthModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeEditAuth();
+  });
+  document.getElementById('editPassword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') authenticateEdit();
   });
 
   // ─── Manual Entry ───
@@ -1078,6 +1267,17 @@
     const form = document.getElementById('manualEntryForm');
     const btn = document.getElementById('btnToggleManual');
     const isVisible = form.classList.contains('visible');
+    if (!isVisible) {
+      requireEditAuth(toggleManualEntryUnlocked);
+      return;
+    }
+    toggleManualEntryUnlocked();
+  }
+
+  function toggleManualEntryUnlocked() {
+    const form = document.getElementById('manualEntryForm');
+    const btn = document.getElementById('btnToggleManual');
+    const isVisible = form.classList.contains('visible');
     form.classList.toggle('visible');
     btn.style.display = isVisible ? '' : 'none';
     if (!isVisible) {
@@ -1091,6 +1291,10 @@
   }
 
   function addManualEntry() {
+    requireEditAuth(addManualEntryUnlocked);
+  }
+
+  function addManualEntryUnlocked() {
     const dateVal = document.getElementById('manualDate').value;
     const timeInVal = document.getElementById('manualTimeIn').value;
     const timeOutVal = document.getElementById('manualTimeOut').value;
@@ -1139,9 +1343,8 @@
   }
 
   // ─── Init ───
-  updateUI();
+  initializeSupabase();
 </script>
 
 </body>
 </html>
-
