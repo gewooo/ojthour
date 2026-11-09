@@ -620,14 +620,14 @@
     <h3>Sign In to Edit</h3>
     <p>Use your Supabase email and password to access your shared logs.</p>
     <div class="form-group" style="margin-top:14px;">
-      <label for="editUsername">Email</label>
-      <input type="email" id="editUsername" autocomplete="email">
+      <label for="editUsername">Username</label>
+      <input type="text" id="editUsername" autocomplete="username" value="gelo">
     </div>
     <div class="form-group" style="margin-top:12px;">
       <label for="editPassword">Password</label>
       <input type="password" id="editPassword" autocomplete="current-password">
     </div>
-    <div class="form-error" id="editAuthError">⚠ Invalid email or password.</div>
+    <div class="form-error" id="editAuthError">⚠ Invalid username or password.</div>
     <div class="modal-btns">
       <button class="btn btn-in" style="background:var(--surface-alt)" onclick="closeEditAuth()">Cancel</button>
       <button class="btn btn-in" style="background:var(--surface-alt)" onclick="createAccount()">Create account</button>
@@ -641,6 +641,8 @@
   // ─── State ───
   const SUPABASE_URL = 'https://ndlstqrrxklrsewmoidv.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_s7M0uCk8-dCyhpVv5Z4N2Q_KcY694dW';
+  const EDIT_USERNAME = 'gelo';
+  const EDIT_ACCOUNT_EMAIL = 'gelo@ojthour.local';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const STORAGE_KEY = 'ojt_tracker_local_backup';
   let state = loadLocalState();
@@ -1174,7 +1176,7 @@
 
   function openEditAuth() {
     document.getElementById('editAuthError').classList.remove('visible');
-    document.getElementById('editUsername').value = '';
+    document.getElementById('editUsername').value = EDIT_USERNAME;
     document.getElementById('editPassword').value = '';
     document.getElementById('editAuthModal').classList.add('visible');
     document.getElementById('editUsername').focus();
@@ -1186,8 +1188,9 @@
   }
 
   async function authenticateEdit() {
-    const email = document.getElementById('editUsername').value.trim();
+    const username = document.getElementById('editUsername').value.trim().toLowerCase();
     const password = document.getElementById('editPassword').value;
+    const email = username === EDIT_USERNAME ? EDIT_ACCOUNT_EMAIL : username;
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) {
       console.error('Supabase sign-in failed:', error);
@@ -1207,8 +1210,9 @@
   }
 
   async function createAccount() {
-    const email = document.getElementById('editUsername').value.trim();
+    const username = document.getElementById('editUsername').value.trim().toLowerCase();
     const password = document.getElementById('editPassword').value;
+    const email = username === EDIT_USERNAME ? EDIT_ACCOUNT_EMAIL : username;
     const { error } = await supabaseClient.auth.signUp({ email, password });
     if (error) {
       console.error('Supabase account creation failed:', error);
