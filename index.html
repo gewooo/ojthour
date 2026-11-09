@@ -598,7 +598,7 @@
     <div id="logList"></div>
   </div>
   <p style="color:var(--text-dim);font-size:0.68rem;text-align:center;margin-top:10px;">
-    Sign in to load and edit your shared logs from any device.
+    Logs are visible on any device. Sign in only when you need to make changes.
   </p>
 </div>
 
@@ -1153,6 +1153,25 @@
     updateUI();
   }
 
+  async function loadPublicState() {
+    const { data, error } = await supabaseClient
+      .from('tracker_state')
+      .select('data')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('Could not load public tracker state:', error);
+      updateUI();
+      return;
+    }
+
+    if (data && data.length > 0 && data[0].data) {
+      state = { ...defaultState(), ...data[0].data };
+    }
+    updateUI();
+  }
+
   async function initializeSupabase() {
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) {
@@ -1166,7 +1185,7 @@
       await loadSharedState(currentUser);
       return;
     }
-    updateUI();
+    await loadPublicState();
   }
 
   // Close modal on backdrop click
